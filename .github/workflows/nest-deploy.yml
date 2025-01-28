@@ -1,49 +1,70 @@
+# Nom du workflow qui apparaît dans l'interface GitHub Actions
 name: NestJS Deployment
 
+# Définit quand le workflow doit être déclenché
 on:
   push:
-    branches: [ main ]
+    branches: [ main ]  # Se déclenche lors d'un push sur la branche main
   pull_request:
-    branches: [ main ]
+    branches: [ main ]  # Se déclenche lors d'une pull request vers main
 
+# Liste des tâches à exécuter
 jobs:
   deploy:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest  # Utilise la dernière version d'Ubuntu comme environnement d'exécution
 
     steps:
+    # Étape 1: Récupère le code source du dépôt
     - uses: actions/checkout@v2
 
+    # Étape 2: Configure Node.js dans l'environnement
     - name: Setup Node.js
       uses: actions/setup-node@v2
       with:
-        node-version: '18'
-        cache: 'npm'
+        node-version: '18'  # Utilise Node.js version 18
+        cache: 'npm'       # Active la mise en cache des dépendances npm
 
+    # Étape 3: Installe les dépendances du projet
     - name: Install Dependencies
-      run: npm ci
+      run: npm ci  # Utilise npm ci pour une installation propre et reproductible
 
+    # Étape 4: Compile l'application
     - name: Build
       run: npm run build
 
+    # Étape 5: Construit et pousse l'image Docker
     - name: Docker Build and Push
       env:
+        # Utilise les secrets GitHub pour les identifiants Docker Hub
         DOCKER_USERNAME: ${{ secrets.DOCKER_HUB_USERNAME }}
         DOCKER_PASSWORD: ${{ secrets.DOCKER_HUB_TOKEN }}
       run: |
         docker login -u $DOCKER_USERNAME -p $DOCKER_PASSWORD
-        docker build -t meodel/nest-app:latest .
-        docker push meodel/nest-app:latest
+        docker build -t meodel/nest-app:latest .  # Construit l'image Docker
+        docker push meodel/nest-app:latest        # Pousse l'image sur Docker Hub
 
-    - name: Deploy to VPS
-      if: github.ref == 'refs/heads/main'
-      uses: appleboy/ssh-action@master
+    # Étape 6: Copie les fichiers de configuration
+    - name: Copy configuration files
+      uses: appleboy/scp-action@master
       with:
         host: 45.81.84.133
         username: adminlocal
         key: ${{ secrets.SSH_PRIVATE_KEY }}
         port: 9036
+        source: "docker-compose.yml,nginx.conf"
+        target: "/home/adminlocal"
+
+    # Étape 7: Déploie sur le VPS
+    - name: Deploy to VPS
+      if: github.ref == 'refs/heads/main'  # Exécute uniquement si on est sur la branche main
+      uses: appleboy/ssh-action@master
+      with:
+        host: 45.81.84.133          # Adresse IP du VPS
+        username: adminlocal        # Nom d'utilisateur pour la connexion SSH
+        key: ${{ secrets.SSH_PRIVATE_KEY }}  # Clé SSH stockée dans les secrets GitHub
+        port: 9036                  # Port SSH personnalisé
         script: |
-          docker pull meodel/nest-app:latest
-          docker stop nest-app || true
-          docker rm nest-app || true
-          docker run -d --name nest-app --network host meodel/nest-app:latest 
+          cd /home/adminlocal
+          docker-compose pull
+          docker-compose down
+          docker-compose up -d 
