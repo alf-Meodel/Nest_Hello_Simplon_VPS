@@ -5,10 +5,11 @@ services:
     image: meodel/nest-app:latest
     container_name: nest-app
     restart: always
-    ports:
-      - "9036:9036"
+    network_mode: host
     environment:
       - NODE_ENV=production
+    ports:
+      - "9036:9036"
     networks:
       - app-network
 
