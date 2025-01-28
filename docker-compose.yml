@@ -12,13 +12,12 @@ services:
       - nest-app
     networks:
       - app-network
+    restart: always
 
   nest-app:
     image: meodel/nest-app:latest
     container_name: nest-app
     restart: always
-    expose:
-      - "9036"
     environment:
       - NODE_ENV=production
     networks:
