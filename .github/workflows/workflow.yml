@@ -1,0 +1,76 @@
+# Nom personnalisable du workflow - peut être n'importe quoi
+name: Basic NestJS CI/CD
+
+# 'on' est OBLIGATOIRE - définit quand le workflow se déclenche
+on:
+  # 'push' est personnalisable - vous pouvez choisir d'autres événements
+  push:
+    # 'branches' est personnalisable - vous pouvez spécifier n'importe quelle branche
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+# 'jobs' est OBLIGATOIRE - définit les tâches à exécuter
+jobs:
+  test-and-build:
+    # 'runs-on' est OBLIGATOIRE - mais vous pouvez choisir d'autres environnements (windows, macos)
+    runs-on: ubuntu-latest
+
+    # 'steps' est OBLIGATOIRE - liste des étapes à exécuter
+    steps:
+    # Action officielle de GitHub - RECOMMANDÉE mais personnalisable
+    - uses: actions/checkout@v2
+
+    # Nom de l'étape PERSONNALISABLE
+    - name: Setup Node.js
+      # Action officielle pour Node.js - RECOMMANDÉE mais personnalisable
+      uses: actions/setup-node@v2
+      with:
+        # Version de Node.js PERSONNALISABLE
+        node-version: '18'
+        cache: 'npm'  # Active le cache pour npm
+
+    - name: Install Dependencies
+      run: npm ci  # Utilise npm ci au lieu de npm install pour une installation plus propre
+
+    - name: Lint Check
+      run: |
+        npm run lint
+        npm run format:check  # Vérifie le formatage du code
+
+    - name: Run Tests
+      run: |
+        npm run test
+        npm run test:e2e
+      env:
+        NODE_ENV: test
+
+    - name: Build
+      run: npm run build
+
+    # Configuration Docker Hub - PERSONNALISABLE
+    - name: Docker Build and Push
+      env:
+        DOCKER_USERNAME: ${{ secrets.DOCKER_HUB_USERNAME }}
+        DOCKER_PASSWORD: ${{ secrets.DOCKER_HUB_TOKEN }}
+      run: |
+        docker login -u $DOCKER_USERNAME -p $DOCKER_PASSWORD
+        docker build -t meodel/nest-app:latest .
+        docker push meodel/nest-app:latest
+
+    # Déploiement sur VPS - PERSONNALISABLE
+    - name: Deploy to VPS
+      if: github.ref == 'refs/heads/main'  # Déploie uniquement si on est sur main
+      uses: appleboy/ssh-action@master
+      with:
+        # Configuration SSH PERSONNALISABLE
+        host: 45.81.84.133
+        username: adminlocal
+        key: ${{ secrets.SSH_PRIVATE_KEY }}
+        port: 9036
+        # Script de déploiement PERSONNALISABLE
+        script: |
+          docker pull meodel/nest-app:latest
+          docker stop nest-app || true
+          docker rm nest-app || true
+          docker run -d --name nest-app --network host meodel/nest-app:latest 
